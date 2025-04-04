@@ -1,0 +1,35 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install SSH key
+      uses: shimataro/ssh-key-action@v2
+      with:
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        known_hosts: "just-a-placeholder-so-we-dont-get-errors"
+
+    - name: Build Docker image
+      run: docker build -t simple-webapp .
+
+    - name: Save Docker image
+      run: docker save simple-webapp -o webapp.tar
+
+    - name: Deploy to EC2
+      run: |
+        scp -o StrictHostKeyChecking=no webapp.tar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+          docker load -i /home/${{ secrets.EC2_USER }}/webapp.tar
+          docker stop webapp || true
+          docker rm webapp || true
+          docker run -d --name webapp -p 3000:3000 simple-webapp
+        "
